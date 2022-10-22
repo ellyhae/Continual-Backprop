@@ -1,6 +1,5 @@
 import torch
 from torch import Tensor
-from torch.optim.optimizer import Optimizer
 from typing import List, Optional
 from torch.optim import Adam
 
