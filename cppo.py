@@ -9,7 +9,6 @@ class CPPO_Policy(ActorCriticPolicy):
         lr_schedule,
         **kwargs
     ):
-        assert not 'optimizer_class' in kwargs
         super(CPPO_Policy, self).__init__(observation_space, action_space, lr_schedule, **(kwargs|{'optimizer_kwargs':{}})) # remove optimizer_kwargs, as __init__ initializes Adam with them, which throws errors
         self.optimizer_kwargs = kwargs['optimizer_kwargs']
         assert len(self.mlp_extractor.shared_net) == 0, 'no shared layers between policy and value function allowed' # not used in the paper, might try to implement it later
