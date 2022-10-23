@@ -5,3 +5,11 @@ Currently:
 - Adam implementation that allows for resetting individual weights' 'step' counter
 - Jupyter notebook for trial and error experiments
 - Pre-calculated 1M steps of bitflip environment data for easier validation of changed algorithms
+- SlipperyAnt environment based on Pybullets' Ant environment. Periodically changes the friction between ant and ground
+- CBP implementation. There are still open questions about handling batches and replacement rate
+- CPPO based on PPO implementation by stable baselines 3
+- Training notebook for everything related to training CPPO
+- Tensorboard logging. View with 
+```console
+tensorboard --logdir ./ant_tensorboard/
+```
