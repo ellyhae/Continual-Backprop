@@ -1,7 +1,7 @@
 import numpy as np
-from pybulletgym.envs.mujoco.envs.locomotion.ant_env import AntMuJoCoEnv
+from pybullet_envs.gym_locomotion_envs import AntBulletEnv
 
-class SlindingAntEnv(AntMuJoCoEnv):
+class SlindingAntEnv(AntBulletEnv):
     '''
     Change the friction between Ant and Floor every change_steps timesteps to a random number between 10**log_low and 10**log_high
     '''
