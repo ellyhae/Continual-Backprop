@@ -133,8 +133,8 @@ def plot_ages(ages_dir, name, iteration): # TODO add animation
         plt.xticks(range(1, len(ages.files)+1), ages.files)
     plt.show()
     
-def run_experiment(name, learner_class, params, seed, total_timesteps, n_jumps, eval_args, model_dir, ages_dir):
-    env = Monitor(SlidingAntEnv(total_timesteps//n_jumps))
+def run_experiment(name, learner_class, params, seed, total_timesteps, n_jumps, max_steps, eval_args, model_dir, ages_dir):
+    env = Monitor(SlidingAntEnv(total_timesteps//n_jumps, max_steps=max_steps))
     ppo = PPO(learner_class, env, seed=int(seed), **params)
     callbacks = [WeightLogger(), AgesLogger(os.path.join(ages_dir, name)), SlidingEval(**eval_args)]
     ppo.learn(total_timesteps=total_timesteps, callback=callbacks, tb_log_name=name)
@@ -145,12 +145,12 @@ def get_cppo_settings(settings, cppo_options, cppo_option_index):
     cppo_settings['policy_kwargs']['optimizer_kwargs'] |= cppo_options[cppo_option_index]
     return cppo_settings
 
-def get_experiment_combinations(n_repetitions, settings, cppo_options, total_timesteps, n_jumps, eval_args, model_dir, ages_dir, entropy):
+def get_experiment_combinations(n_repetitions, settings, cppo_options, total_timesteps, n_jumps, max_steps, eval_args, model_dir, ages_dir, entropy):
     seed_sequence = np.random.SeedSequence(entropy)
     seeds = seed_sequence.generate_state(n_repetitions)
     
-    experiments = [('baseline_'+str(i), "MlpPolicy", settings, seed, total_timesteps, n_jumps, eval_args, model_dir, ages_dir) for i, seed in enumerate(seeds)]
-    experiments += [(f'cppo {option}_{i}', CPPO_Policy, get_cppo_settings(settings, cppo_options, option), seeds[i], total_timesteps, n_jumps, eval_args, model_dir, ages_dir) 
+    experiments = [('baseline_'+str(i), "MlpPolicy", settings, seed, total_timesteps, n_jumps, max_steps, eval_args, model_dir, ages_dir) for i, seed in enumerate(seeds)]
+    experiments += [(f'cppo {option}_{i}', CPPO_Policy, get_cppo_settings(settings, cppo_options, option), seeds[i], total_timesteps, n_jumps, max_steps, eval_args, model_dir, ages_dir) 
                     for option, i in product(range(len(cppo_options)), range(n_repetitions))]
     
     return experiments
