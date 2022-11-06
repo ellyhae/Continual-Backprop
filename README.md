@@ -9,7 +9,21 @@ Currently:
 - CBP implementation. There are still open questions about handling batches and replacement rate
 - CPPO based on PPO implementation by stable baselines 3
 - Training notebook for everything related to training CPPO
-- Tensorboard logging. View with 
+- Tensorboard logging.
+
+## Tensorboard
 ```console
-tensorboard --logdir ./ant_tensorboard/
+tensorboard --logdir [path, e.g. hydra_outputs/date/time]
+```
+
+## Hydra
+
+```console
+python hydra_launcher.py --multirun algorithm=ppo,cppo1 random=seed1,seed2
+```
+
+or
+
+```console
+python hydra_launcher.py --multirun algorithm=glob(*) random=glob(*)
 ```
