@@ -1,0 +1,7 @@
+policy: CPPO_Policy
+
+settings:
+  policy_kwargs:
+    optimizer_kwargs:
+      rho: 1e-5
+      m: 50000
