@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 from itertools import product
 
+import wandb
+
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
@@ -57,27 +59,12 @@ class AgesLogger(BaseCallback):
             for model, model_name in zip(self.model.policy.optimizer.linear_layers, ['policy', 'value']):
                 for i, layer in enumerate(model):
                     ages[f'{model_name}_{i}'] = self.model.policy.optimizer.cbp_vals[layer]['age'].cpu().numpy()
-               
+            
             np.savez_compressed(os.path.join(self.save_dir, str(self.iteration)+'.npz'), **ages)
+            
+            wandb.log({'ages': ages})
                 
             self.iteration += 1
-    
-#class SlidingEval(EvalCallback):
-#    def __init__(self, **kwargs):
-#        super(SlidingEval, self).__init__(Monitor(SlidingAntEnv(change_steps=np.inf)), eval_freq=0, **kwargs)
-#        
-#    def _on_rollout_start(self):
-#        self._eval()
-#        
-#    def _on_training_end(self):
-#        self._eval()
-#    
-#    def _eval(self):
-#        self.eval_freq = 1
-#        for e in self.eval_env.envs:
-#            e.env.friction = self.training_env.envs[0].env.friction
-#        super(SlidingEval, self)._on_step()
-#        self.eval_freq = 0
 
 class SlidingEval(BaseCallback):
     def __init__(self, max_steps, deterministic=True, n_eval_episodes=1):
@@ -93,8 +80,12 @@ class SlidingEval(BaseCallback):
         self._eval()
     
     def _eval(self):
+        env = self.training_env.envs[0].env
+        assert env.friction == env._p.getDynamicsInfo(*next(iter(env.ground_ids)))[1]
+        self.logger.record("train/friction", env.friction)
+        
         for e in self.eval_env.envs:
-            e.env.friction = self.training_env.envs[0].env.friction
+            e.env.friction = env.friction
         episode_rewards, episode_lengths = evaluate_policy(
             self.model,
             self.eval_env,
