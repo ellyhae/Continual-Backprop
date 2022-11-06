@@ -20,6 +20,7 @@ n_jumps: 2
 train_max_steps: 2000
 model_dir: ./
 ages_dir: ./ages
+video_dir: ./video
 
 algorithm:
   settings:
@@ -44,3 +45,7 @@ eval:
   max_steps: 2000
   n_eval_episodes: 1
   deterministic: True
+
+wandb:
+  group: ${hydra:runtime.choices.algorithm}
+  mode: offline
