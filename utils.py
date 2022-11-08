@@ -70,7 +70,9 @@ class AgesLogger(BaseCallback):
 class SlidingEval(BaseCallback):
     def __init__(self, max_steps, deterministic=True, n_eval_episodes=1):
         super(SlidingEval, self).__init__()
-        self.eval_env = DummyVecEnv([lambda: Monitor(SlidingAntEnv(change_steps=np.inf, max_steps=max_steps))])
+        env = Monitor(SlidingAntEnv(change_steps=np.inf, max_steps=max_steps))
+        env.reset()
+        self.eval_env = DummyVecEnv([lambda: env])
         self.deterministic = deterministic
         self.n_eval_episodes = n_eval_episodes
         
@@ -82,11 +84,12 @@ class SlidingEval(BaseCallback):
     
     def _eval(self):
         env = self.training_env.envs[0].env
-        assert env.friction == env._p.getDynamicsInfo(*next(iter(env.ground_ids)))[1]
-        self.logger.record("train/friction", env.friction)
+        self.logger.record("friction", env.friction)
         
         for e in self.eval_env.envs:
             e.env.friction = env.friction
+            e.env._set_friction()
+            assert e.env._p.getDynamicsInfo(*next(iter(e.env.ground_ids)))[1] == env._p.getDynamicsInfo(*next(iter(env.ground_ids)))[1]
         episode_rewards, episode_lengths = evaluate_policy(
             self.model,
             self.eval_env,
