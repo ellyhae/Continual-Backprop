@@ -11,7 +11,12 @@ Currently:
 - Training notebook for everything related to training CPPO
 - Tensorboard logging.
 
+## WandB
+
+On Windows: remember to activate Developer Mode, otherwise WandB cannot sync Tensorboard data (relies on symlinks that are not available otherwise)
+
 ## Tensorboard
+
 ```console
 tensorboard --logdir [path, e.g. hydra_outputs/date/time]
 ```
