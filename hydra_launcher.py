@@ -24,13 +24,14 @@ from utils import WeightLogger, AgesLogger, SlidingEval
 
 @hydra.main(version_base=None, config_path="hydra_config", config_name="config")
 def run_experiment(cfg: DictConfig) -> None:
+    
     # just in case, set global seed
     np.random.seed(cfg.random.seed)
     torch.manual_seed(cfg.random.seed)
     
     hydra_cfg = HydraConfig.get()
     if hydra_cfg.job.num < hydra_cfg.launcher.n_jobs:
-        wandb.tensorboard.patch(root_logdir=cfg.wandb.tensorboard_root_dir)
+        wandb.tensorboard.patch(save=True, root_logdir=cfg.wandb.tensorboard_root_dir, pytorch=True)
     
     run = wandb.init(
         project="CPPO",
@@ -38,7 +39,7 @@ def run_experiment(cfg: DictConfig) -> None:
         name=cfg.name,
         config=OmegaConf.to_container(cfg, resolve=True),
         dir=cfg.wandb.dir,
-        sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
+        #sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
         monitor_gym=True,  # auto-upload the videos of agents playing the game
         mode=cfg.wandb.mode,
         reinit=True
@@ -59,8 +60,10 @@ def run_experiment(cfg: DictConfig) -> None:
     ppo.learn(total_timesteps=cfg.total_timesteps, callback=callbacks, tb_log_name=cfg.name)
     
     ppo.save(os.path.join(cfg.model_dir, cfg.name))
+    ppo.logger.close()
     env.close()  # wandb has logging in env.close(), which is called in the destructor of env. Call explicitly before run.finish(), otherwise wandb connection could be closed before logging (late destructor call)
     run.finish()
 
 if __name__ == "__main__":
+    wandb.setup()
     run_experiment()
