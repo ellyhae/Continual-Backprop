@@ -15,7 +15,7 @@ hydra:
 
 name: ${hydra:runtime.choices.algorithm}_${hydra:runtime.choices.random}
 
-total_timesteps: 4000 #10000
+total_timesteps: 200000
 n_jumps: 2
 train_max_steps: 2000
 model_dir: ./
@@ -47,6 +47,6 @@ eval:
 
 wandb:
   group: ${hydra:runtime.choices.algorithm}
-  mode: offline
+  mode: online #offline
   dir: ${hydra:runtime.cwd}/${hydra:sweep.dir}
   tensorboard_root_dir: ${hydra:runtime.cwd}/${hydra:sweep.dir}/tensorboard
