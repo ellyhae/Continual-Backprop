@@ -33,7 +33,6 @@ class WeightLogger(BaseCallback):
         params = np.abs(self.model.policy.parameters_to_vector())
         self.logger.record("train/weight_magnitude_mean", float(params.mean()))
         self.logger.record("train/weight_magnitude_std", float(params.std()))
-        self.logger.record("global_step", self.num_timesteps)
         self.logger.dump(self.num_timesteps)
 
 class AgesLogger(BaseCallback):
@@ -63,7 +62,8 @@ class AgesLogger(BaseCallback):
             
             np.savez_compressed(os.path.join(self.save_dir, str(self.iteration)+'.npz'), **ages)
             
-            wandb.log({'ages': ages, 'global_step': self.num_timesteps})
+            self.logger.record('ages', ages, exclude='tensorboard')
+            self.logger.dump(self.num_timesteps)
                 
             self.iteration += 1
 
@@ -99,8 +99,6 @@ class SlidingEval(BaseCallback):
         )
         self.logger.record("eval/mean_reward", float(np.mean(episode_rewards)))
         self.logger.record("eval/mean_ep_length", np.mean(episode_lengths))
-        self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
-        self.logger.record("global_step", self.num_timesteps)
         self.logger.dump(self.num_timesteps)
         
     def _on_step(self):
