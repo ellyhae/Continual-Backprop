@@ -11,7 +11,7 @@ hydra:
   job:
     chdir: True
   launcher:
-    n_jobs: 4
+    n_jobs: 6
 
 name: ${hydra:runtime.choices.algorithm}_${hydra:runtime.choices.random}
 
