@@ -21,6 +21,7 @@ from env import SlidingAntEnv
 
 from env import SlidingAntEnv
 from utils import WeightLogger, AgesLogger, SlidingEval
+from sb3_logger import configure_logger, WandbOutputFormat
 
 @hydra.main(version_base=None, config_path="hydra_config", config_name="config")
 def run_experiment(cfg: DictConfig) -> None:
@@ -29,9 +30,7 @@ def run_experiment(cfg: DictConfig) -> None:
     np.random.seed(cfg.random.seed)
     torch.manual_seed(cfg.random.seed)
     
-    hydra_cfg = HydraConfig.get()
-    if hydra_cfg.job.num < hydra_cfg.launcher.n_jobs:
-        wandb.tensorboard.patch(save=True, root_logdir=cfg.wandb.tensorboard_root_dir, pytorch=True)
+    #hydra_cfg = HydraConfig.get()
     
     run = wandb.init(
         project="CPPO",
@@ -39,7 +38,6 @@ def run_experiment(cfg: DictConfig) -> None:
         name=cfg.name,
         config=OmegaConf.to_container(cfg, resolve=True),
         dir=cfg.wandb.dir,
-        #sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
         monitor_gym=True,  # auto-upload the videos of agents playing the game
         mode=cfg.wandb.mode,
         reinit=True
@@ -56,13 +54,16 @@ def run_experiment(cfg: DictConfig) -> None:
     
     ppo = PPO(learner_class, env, seed=int(cfg.random.seed), **settings)
     
-    callbacks = [WeightLogger(), AgesLogger(cfg.ages_dir), SlidingEval(**cfg.eval), WandbCallback(verbose=2, gradient_save_freq=500)]
-    ppo.learn(total_timesteps=cfg.total_timesteps, callback=callbacks, tb_log_name=cfg.name)
+    tb_log_dir = settings['tensorboard_log']
+    tb_log_name = cfg.name
+    ppo.set_logger(configure_logger(0, tb_log_dir, tb_log_name, True, ['wandb'], {'wandb': WandbOutputFormat}))
+    
+    callbacks = [WeightLogger(), AgesLogger(cfg.ages_dir), SlidingEval(**cfg.eval), WandbCallback(gradient_save_freq=500)]
+    ppo.learn(total_timesteps=cfg.total_timesteps, callback=callbacks, tb_log_name=tb_log_name)
     
     ppo.save(os.path.join(cfg.model_dir, cfg.name))
+    env.close()
     ppo.logger.close()
-    env.close()  # wandb has logging in env.close(), which is called in the destructor of env. Call explicitly before run.finish(), otherwise wandb connection could be closed before logging (late destructor call)
-    run.finish()
 
 if __name__ == "__main__":
     wandb.setup()
