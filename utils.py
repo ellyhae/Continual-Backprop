@@ -56,14 +56,15 @@ class AgesLogger(BaseCallback):
     def _save(self):
         if hasattr(self.model.policy.optimizer, 'cbp_vals'):
             ages = {}
-            for model, model_name in zip(self.model.policy.optimizer.linear_layers, ['policy', 'value']):
+            for model, model_name in zip(self.model.policy.optimizer.linear_layers, ['policy_net', 'value_net']):
                 for i, layer in enumerate(model):
-                    ages[f'{model_name}_{i}'] = self.model.policy.optimizer.cbp_vals[layer]['age'].cpu().numpy()
+                    val = self.model.policy.optimizer.cbp_vals[layer]['age'].cpu().numpy()
+                    ages[f'{model_name}_{i}'] = val
+                    self.logger.record(f'ages/{model_name}/{i}', val, exclude='tensorboard')
+
+            self.logger.dump(self.num_timesteps)
             
             np.savez_compressed(os.path.join(self.save_dir, str(self.iteration)+'.npz'), **ages)
-            
-            self.logger.record('ages', ages, exclude='tensorboard')
-            self.logger.dump(self.num_timesteps)
                 
             self.iteration += 1
 
