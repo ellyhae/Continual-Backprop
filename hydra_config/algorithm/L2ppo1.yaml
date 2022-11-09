@@ -1,0 +1,6 @@
+policy: MlpPolicy
+
+settings:
+  policy_kwargs:
+    optimizer_kwargs:
+      weight_decay: 1e-3
