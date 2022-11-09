@@ -9,7 +9,7 @@ import torch as th
 import wandb
 
 from PIL import Image as PILImage
-from stable_baselines3.common.logger import KVWriter, Logger, TensorBoardOutputFormat, CSVOutputFormat, HumanOutputFormat, JSONOutputFormat, Video, Image, Figure, HParam
+from stable_baselines3.common.logger import KVWriter, Logger, Video, Image, Figure, HParam, make_output_format
 from stable_baselines3.common.utils import get_latest_run_id
 
 try:
@@ -41,7 +41,7 @@ class WandbOutputFormat(KVWriter):
             if isinstance(value, np.ScalarType) or isinstance(value, dict) or isinstance(value, list):
                 log_dict[key] = value
 
-            if isinstance(value, th.Tensor):
+            if isinstance(value, th.Tensor) or isinstance(value, np.ndarray):
                 log_dict[key] = value #  wandb.Histogram()
 
             if isinstance(value, Video):
@@ -67,38 +67,11 @@ class WandbOutputFormat(KVWriter):
 
     def close(self):
         """
-        closes the file
+        finishes the wandb run
         """
         wandb.finish()
 
-def make_output_format(_format: str, log_dir: str, log_suffix: str = "", extra_loggers={}):
-    """
-    Function from stable_baselines3.common.logger
-    Adapted to allow custom logger formats
-    
-    return a logger for the requested format
-    :param _format: the requested format to log to ('stdout', 'log', 'json' or 'csv' or 'tensorboard')
-    :param log_dir: the logging directory
-    :param log_suffix: the suffix for the log file
-    :return: the logger
-    """
-    os.makedirs(log_dir, exist_ok=True)
-    if _format == "stdout":
-        return HumanOutputFormat(sys.stdout)
-    elif _format == "log":
-        return HumanOutputFormat(os.path.join(log_dir, f"log{log_suffix}.txt"))
-    elif _format == "json":
-        return JSONOutputFormat(os.path.join(log_dir, f"progress{log_suffix}.json"))
-    elif _format == "csv":
-        return CSVOutputFormat(os.path.join(log_dir, f"progress{log_suffix}.csv"))
-    elif _format == "tensorboard":
-        return TensorBoardOutputFormat(log_dir)
-    elif _format in extra_loggers:
-        return extra_loggers[_format](log_dir, log_suffix)
-    else:
-        raise ValueError(f"Unknown format specified: {_format}")
-
-def configure(folder = None, format_strings = None, extra_loggers={}):
+def configure(folder = None, format_strings = None, extra_formats=[]):
     """
     Function from stable_baselines3.common.logger
     Adapted to allow custom logger formats
@@ -122,7 +95,8 @@ def configure(folder = None, format_strings = None, extra_loggers={}):
         format_strings = os.getenv("SB3_LOG_FORMAT", "stdout,log,csv").split(",")
 
     format_strings = list(filter(None, format_strings))
-    output_formats = [make_output_format(f, folder, log_suffix, extra_loggers) for f in format_strings]
+    output_formats = [make_output_format(f, folder, log_suffix) for f in format_strings]
+    output_formats += [_format(folder, log_suffix) for _format in extra_formats]
 
     logger = Logger(folder=folder, output_formats=output_formats)
     # Only print when some files will be saved
@@ -135,8 +109,7 @@ def configure_logger(
     tensorboard_log = None,
     tb_log_name: str = "",
     reset_num_timesteps: bool = True,
-    format_strings = [],
-    extra_loggers = {},
+    extra_formats = [],
 ) -> Logger:
     """
     Function from stable_baselines3.common.utils
@@ -151,7 +124,7 @@ def configure_logger(
         or start from t=0 (``reset_num_timesteps=True``, the default).
     :return: The logger object
     """
-    save_path = None
+    save_path, format_strings = None, ["stdout"]
 
     if tensorboard_log is not None and SummaryWriter is None:
         raise ImportError("Trying to log data to tensorboard but tensorboard is not installed.")
@@ -163,11 +136,9 @@ def configure_logger(
             latest_run_id -= 1
         save_path = os.path.join(tensorboard_log, f"{tb_log_name}_{latest_run_id + 1}")
         if verbose >= 1:
-            format_strings = ["stdout", "tensorboard"] + format_strings
+            format_strings = ["stdout", "tensorboard"]
         else:
-            format_strings = ["tensorboard"] + format_strings
+            format_strings = ["tensorboard"]
     elif verbose == 0:
         format_strings = [""]
-    elif len(format_strings) == 0:
-        format_strings = ["stdout"]
-    return configure(save_path, format_strings=format_strings, extra_loggers=extra_loggers)
+    return configure(save_path, format_strings=format_strings, extra_formats=extra_formats)
