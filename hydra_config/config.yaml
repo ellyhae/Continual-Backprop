@@ -15,6 +15,8 @@ hydra:
 
 name: ${hydra:runtime.choices.algorithm}_${hydra:runtime.choices.random}
 
+seed_name: ${hydra:runtime.choices.random}
+
 total_timesteps: 20000
 n_jumps: 2
 train_max_steps: 2000
@@ -49,4 +51,4 @@ wandb:
   group: ${hydra:runtime.choices.algorithm}
   mode: online #offline
   dir: ${hydra:runtime.cwd}/${hydra:sweep.dir}
-  tensorboard_root_dir: ${hydra:runtime.cwd}/${hydra:sweep.dir}/tensorboard
+  gradient_save_freq: 1000
