@@ -46,14 +46,14 @@ class CAdam(Adam):
                         ### CHANGED ###
                         #state['step'] = torch.zeros((1,), dtype=torch.float, device=p.device) \
                         #    if self.defaults['capturable'] else torch.tensor(0.)
-                        state['step'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                        state['step'] = torch.zeros_like(p, memory_format=torch.preserve_format, device=p.device)
                         ###############
                         
                         
                         # Exponential moving average of gradient values
-                        state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                        state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format, device=p.device)
                         # Exponential moving average of squared gradient values
-                        state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                        state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format, device=p.device)
                         if group['amsgrad']:
                             # Maintains max of all exp. moving avg. of sq. grad. values
                             state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
@@ -140,6 +140,20 @@ def cadam(params: List[Tensor],
          maximize=maximize,
          capturable=capturable)
 
+@torch.jit.script
+def _single_param_cadam(param, grad, exp_avg, exp_avg_sq, step, beta1: float, beta2: float, lr: float, eps: float, weight_decay: float):
+    step.add_(1)
+    if weight_decay != 0:
+        grad = grad.add(param, alpha=weight_decay)
+        
+    exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+    exp_avg_sq.mul_(beta2).addcmul_(grad, grad.conj(), value=1 - beta2)
+    bias_correction1 = (beta1 ** step).neg_().add_(1)
+    bias_correction2 = (beta2 ** step).neg_().add_(1)
+    step_size = lr / bias_correction1
+    bias_correction2_sqrt = bias_correction2.sqrt_()
+    denom = (exp_avg_sq.sqrt() / bias_correction2_sqrt).add_(eps)
+    param.sub_((exp_avg / denom).mul_(step_size))
 
 def _single_tensor_cadam(params: List[Tensor],
                         grads: List[Tensor],
@@ -156,7 +170,7 @@ def _single_tensor_cadam(params: List[Tensor],
                         eps: float,
                         maximize: bool,
                         capturable: bool):
-
+    
     for i, param in enumerate(params):
 
         grad = grads[i] if not maximize else -grads[i]
@@ -167,50 +181,4 @@ def _single_tensor_cadam(params: List[Tensor],
         if capturable:
             assert param.is_cuda and step_t.is_cuda, "If capturable=True, params and state_steps must be CUDA tensors."
 
-        # update step
-        # update step
-        ### CHANGED ###
-        #step_t += 1
-        step_t.add_(1)
-        ###############
-
-        if weight_decay != 0:
-            grad = grad.add(param, alpha=weight_decay)
-
-        # Decay the first and second moment running average coefficient
-        exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
-        exp_avg_sq.mul_(beta2).addcmul_(grad, grad.conj(), value=1 - beta2)
-
-        if capturable:
-            ### CHANGED ###
-            # code
-            raise NotImplementedError()
-            ###############
-        else:
-            ### CHANGED ###
-            #step = step_t.item()
-            step = step_t
-            ###############
-
-            bias_correction1 = 1 - beta1 ** step
-            bias_correction2 = 1 - beta2 ** step
-
-            step_size = lr / bias_correction1
-
-            ### CHANGED ###
-            #bias_correction2_sqrt = math.sqrt(bias_correction2)
-            bias_correction2_sqrt = bias_correction2.sqrt()
-            ###############
-
-            if amsgrad:
-                # Maintains the maximum of all 2nd moment running avg. till now
-                torch.maximum(max_exp_avg_sqs[i], exp_avg_sq, out=max_exp_avg_sqs[i])
-                # Use the max. for normalizing running avg. of gradient
-                denom = (max_exp_avg_sqs[i].sqrt() / bias_correction2_sqrt).add_(eps)
-            else:
-                denom = (exp_avg_sq.sqrt() / bias_correction2_sqrt).add_(eps)
-
-            ### CHANGED ###
-            #param.addcdiv_(exp_avg, denom, value=-step_size)
-            param.sub_((exp_avg / denom).mul_(step_size))
-            ###############
+        _single_param_cadam(param, grad, exp_avg, exp_avg_sq, step_t, beta1, beta2, lr, eps, weight_decay)

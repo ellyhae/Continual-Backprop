@@ -2,6 +2,63 @@ import torch
 from cadam import CAdam
 import math
 from stable_baselines3.common.utils import get_device
+from typing import Dict, Tuple
+
+@torch.jit.script
+def _hook_calcs(cbp_vals: Dict[str, torch.Tensor], out: torch.Tensor, eta: torch.Tensor):
+    # NOTE Seems CBP is only described for sequential input with gradient updates at each step.
+    #      Since PPO is based on batched environment data, changes have to be made
+    #      I will therefore work with means over the baches
+    cbp_vals['age'].add_(1)
+    cbp_vals['h'] = out.mean(0).detach_()
+    cbp_vals['fhat'] = cbp_vals['f'] / (1 - eta**cbp_vals['age'])
+    cbp_vals['f'].mul_(eta).add_((1-eta)*cbp_vals['h'])
+    
+@torch.jit.ignore
+def sample_weights(size: Tuple[int, int], device: torch.device):
+    sample = torch.empty(size, device=device)
+    torch.nn.init.kaiming_uniform_(sample, a=math.sqrt(5))
+    return sample
+    
+@torch.jit.script
+def _step_calcs(cbp_vals: Dict[str, torch.Tensor],
+                pre_state: Dict[str, torch.Tensor],
+                post_state: Dict[str, torch.Tensor],
+                pre_linear: torch.nn.Parameter,
+                post_linear: torch.nn.Parameter,
+                eta: float, m: int, rho: float, eps: float,
+                #sample_weights: torch.jit.ScriptFunction # callables not supported jet
+               ):
+    pre_w = pre_linear.abs().sum(1).detach_().add_(eps) # avoid division by zero
+    post_w = post_linear.abs().sum(0).detach_()
+    
+    y = (cbp_vals['h'] - cbp_vals['fhat']).abs_().mul_(post_w).div_(pre_w)
+    cbp_vals['u'].mul_(eta).add_((1-eta)*y)
+    
+    uhat = cbp_vals['u'] / (1 - eta**cbp_vals['age'])
+    
+    eligible = cbp_vals['age'] > m
+    if eligible.any() and torch.rand(1) < len(uhat)*rho:  # use n_l* rho as a probability of replacing a single feature
+        ascending = uhat.argsort()
+        r = ascending[eligible[ascending]]   # sort eligible indices according to their utility
+        #r = r[:math.ceil(uhat.shape[0]*self.rho)]  # choose top k worst performing features    # using ceil because otherwise nothing ever gets reset int(256*10**-4)=0
+        r = r[[0]]  # choose the worst feature
+        
+        pre_linear.index_copy_(0, r, sample_weights((len(r), pre_linear.shape[1]), pre_linear.device))
+        post_linear.index_fill_(1, r, 0.)
+        
+        cbp_vals['u'].index_fill_(0, r, 0.)
+        cbp_vals['f'].index_fill_(0, r, 0.)
+        cbp_vals['age'].index_fill_(0, r, 0)
+        
+        ### Adam resets
+        pre_state['step'].index_fill_(0, r, 0)
+        pre_state['exp_avg'].index_fill_(0, r, 0.)
+        pre_state['exp_avg_sq'].index_fill_(0, r, 0.)
+        
+        post_state['step'].index_fill_(1, r, 0)
+        post_state['exp_avg'].index_fill_(1, r, 0.)
+        post_state['exp_avg_sq'].index_fill_(1, r, 0.)
 
 class CBP(CAdam):
     '''
@@ -44,7 +101,6 @@ class CBP(CAdam):
                 sample = torch.empty(size, device=device)
                 torch.nn.init.kaiming_uniform_(sample, a=math.sqrt(5))
                 return sample
-            reset_weights = lambda w: torch.nn.init.kaiming_uniform_(w, a=math.sqrt(5))
         self.sample_weights = sample_weights
         self.eps = eps
     
@@ -52,43 +108,13 @@ class CBP(CAdam):
     def step(self):
         super(CBP, self).step()
         for linears, output_linear in zip(self.linear_layers, self.output_linears): # cycle through models
-            # TODO change such that abs is not called twice on each weight Tensor
             for current_linear, next_linear in zip(linears, linears[1:] + [output_linear]): # cycle through layers
                 cbp_vals = self.cbp_vals[current_linear]
+                pre_state = self.state[current_linear.weight]
+                post_state = self.state[next_linear.weight]
                 
-                pre_w = current_linear.weight.abs().sum(1).detach_().add_(self.eps) # avoid division by zero
-                post_w = next_linear.weight.abs().sum(0).detach_()
-                
-                y = (cbp_vals['h'] - cbp_vals['fhat']).abs_().mul_(post_w).div_(pre_w)
-                cbp_vals['u'].mul_(self.eta).add_((1-self.eta)*y)
-                
-                uhat = cbp_vals['u'] / (1 - self.eta**cbp_vals['age'])
-                
-                eligible = cbp_vals['age'] > self.m
-                if eligible.any() and torch.rand(1) < len(uhat)*self.rho:  # use n_l* rho as a probability of replacing a single feature
-                    ascending = uhat.argsort()
-                    r = ascending[eligible[ascending]]   # sort eligible indices according to their utility
-                    #r = r[:math.ceil(uhat.shape[0]*self.rho)]  # choose top k worst performing features    # using ceil because otherwise nothing ever gets reset int(256*10**-4)=0
-                    r = r[[0]]  # choose the worst feature
-                    
-                    current_linear.weight.index_copy_(0, r, self.sample_weights((len(r), current_linear.weight.shape[1]), device=current_linear.weight.device))
-                    next_linear.weight.index_fill_(1, r, 0.)
-                    
-                    cbp_vals['u'].index_fill_(0, r, 0.)
-                    cbp_vals['f'].index_fill_(0, r, 0.)
-                    cbp_vals['age'].index_fill_(0, r, 0)
-                    
-                    ### Adam resets
-                    pre_state = self.state[current_linear.weight]
-                    pre_state['step'].index_fill_(0, r, 0)
-                    pre_state['exp_avg'].index_fill_(0, r, 0.)
-                    pre_state['exp_avg_sq'].index_fill_(0, r, 0.)
-                    
-                    post_state = self.state[next_linear.weight]
-                    post_state['step'].index_fill_(1, r, 0)
-                    post_state['exp_avg'].index_fill_(1, r, 0.)
-                    post_state['exp_avg_sq'].index_fill_(1, r, 0.)
-                    
+                _step_calcs(cbp_vals, pre_state, post_state, current_linear.weight, next_linear.weight, self.eta, self.m, self.rho, self.eps) #self.sample_weights)
+        
     def _hook_gen(self, linear_layer):
         num_units = linear_layer.weight.shape[0]
         self.cbp_vals[linear_layer] = {
@@ -98,17 +124,12 @@ class CBP(CAdam):
             'fhat': torch.zeros(num_units, device=self.dev),
             'u':    torch.zeros(num_units, device=self.dev)
         }
+        
         def hook(mod, inp, out):
             if mod.training:
+                cbp_vals = self.cbp_vals[linear_layer]
                 with torch.no_grad():
-                    # NOTE Seems CBP is only described for sequential input with gradient updates at each step.
-                    #      Since PPO is based on batched environment data, changes have to be made
-                    #      I will therefore work with means over the baches
-                    cbp_vals = self.cbp_vals[linear_layer]
-                    cbp_vals['age'].add_(1)
-                    cbp_vals['h'] = out.mean(0).detach_()
-                    cbp_vals['fhat'] = self.cbp_vals[linear_layer]['f'] / (1 - self.eta**cbp_vals['age'])
-                    cbp_vals['f'].mul_(self.eta).add_((1-self.eta)*cbp_vals['h'])
+                    _hook_calcs(cbp_vals, out, self.eta)
         return hook
     
     def _add_hooks(self, linears, activations):
