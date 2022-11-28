@@ -14,7 +14,8 @@ from hydra.core.hydra_config import HydraConfig
 
 from stable_baselines3.ppo import PPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv, VecVideoRecorder
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecVideoRecorder
 
 from cppo import CPPO_Policy
 from env import SlidingAntEnv
@@ -43,14 +44,18 @@ def run_experiment(cfg: DictConfig) -> None:
         reinit=True
     )
     
-    env = Monitor(SlidingAntEnv(cfg.total_timesteps//cfg.n_jumps, max_steps=cfg.train_max_steps, seed=cfg.random.seed))
-    env = DummyVecEnv([lambda: env])
-    env = VecVideoRecorder(env, cfg.video_dir, record_video_trigger=lambda x: x % (cfg.total_timesteps // (cfg.n_jumps * 2)) == 0, video_length=500)
+    env = make_vec_env(SlidingAntEnv, cfg.n_envs, seed=cfg.random.seed, vec_env_cls=SubprocVecEnv, env_kwargs={'change_steps':(cfg.total_timesteps//cfg.n_jumps)//cfg.n_envs, 'max_steps':cfg.train_max_steps, 'seed':cfg.random.seed})
+    
+    #env = Monitor(SlidingAntEnv(cfg.total_timesteps//cfg.n_jumps, max_steps=cfg.train_max_steps, seed=cfg.random.seed))
+    #env = DummyVecEnv([lambda: env])
+    
+    #env = VecVideoRecorder(env, cfg.video_dir, record_video_trigger=lambda x: x % (cfg.total_timesteps // (cfg.n_jumps * 2)) == 0, video_length=500)
     
     learner_class = "MlpPolicy" if cfg.algorithm.policy == "MlpPolicy" else CPPO_Policy
     
     settings = OmegaConf.to_container(cfg.algorithm.settings, resolve=True)
     settings['policy_kwargs']['activation_fn'] = getattr(torch.nn, settings['policy_kwargs']['activation_fn'])
+    settings['n_steps'] = settings['n_steps'] // cfg.n_envs
     
     ppo = PPO(learner_class, env, seed=int(cfg.random.seed), **settings)
     
