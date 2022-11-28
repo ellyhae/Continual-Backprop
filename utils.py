@@ -73,7 +73,7 @@ class SlidingEval(BaseCallback):
         super(SlidingEval, self).__init__()
         env = Monitor(SlidingAntEnv(change_steps=np.inf, max_steps=max_steps))
         env.reset()
-        self.eval_env = DummyVecEnv([lambda: env])
+        self.eval_env = DummyVecEnv([lambda: env])   # TODO: Need to do multiple envs / runs? Deterministic, but different start
         self.deterministic = deterministic
         self.n_eval_episodes = n_eval_episodes
         
@@ -84,13 +84,11 @@ class SlidingEval(BaseCallback):
         self._eval()
     
     def _eval(self):
-        env = self.training_env.envs[0].env
-        self.logger.record("friction", env.friction)
+        friction = self.training_env.get_attr('friction', 0)[0]
+        self.logger.record("friction", friction)
         
-        for e in self.eval_env.envs:
-            e.env.friction = env.friction
-            e.env._set_friction()
-            assert e.env._p.getDynamicsInfo(*next(iter(e.env.ground_ids)))[1] == env._p.getDynamicsInfo(*next(iter(env.ground_ids)))[1]
+        self.eval_env.env_method('set_friction', friction)
+        
         episode_rewards, episode_lengths = evaluate_policy(
             self.model,
             self.eval_env,
