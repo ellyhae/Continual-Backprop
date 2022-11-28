@@ -19,7 +19,7 @@ class SlidingAntEnv(AntBulletEnv):
     
     def reset(self):
         ret = super(SlidingAntEnv, self).reset()
-        self._set_friction()
+        self.set_friction()
         self.n_steps = 0
         return ret
         
@@ -29,14 +29,15 @@ class SlidingAntEnv(AntBulletEnv):
         self.n_steps += 1
         if self.counter == self.change_steps:
             self.counter = 0
-            self.friction = 10**self.rng.uniform(self.log_low, self.log_high)
-            self._set_friction()
+            self.set_friction(10**self.rng.uniform(self.log_low, self.log_high))
         if self.max_steps is not None and self.n_steps == self.max_steps:   # if step limit is reached, set done=True
             done = True
             self.n_steps = 0
         return observation, reward, done, info
     
-    def _set_friction(self):
+    def set_friction(self, val=None):
+        if val is not None:
+            self.friction = val
         for body_id, joint_id in self.ground_ids:
             self._p.changeDynamics(body_id, joint_id, lateralFriction=self.friction)
             
