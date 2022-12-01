@@ -5,12 +5,15 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 from itertools import product
 
+import multiprocessing as mp
+
 import wandb
 
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.ppo import PPO
 
@@ -68,37 +71,94 @@ class AgesLogger(BaseCallback):
                 
             self.iteration += 1
 
+def eval_loop(policy_cls, settings, n_eval_episodes, deterministic, max_steps, input_queue, output_queue, done_flag):
+    env  = make_vec_env(SlidingAntEnv, 1, env_kwargs={'change_steps':np.inf, 'max_steps':max_steps})
+    env.reset()
+    model = PPO(policy_cls, env, **settings)
+    while not done_flag.value:
+        timestep, sd, friction = input_queue.get()
+        env.env_method('set_friction', friction)
+        for name, tensor in sd.items():
+            sd[name] = tensor.cuda()
+        model.policy.load_state_dict(sd)
+        episode_rewards, episode_lengths = evaluate_policy(
+            model,
+            env,
+            n_eval_episodes=n_eval_episodes,
+            deterministic=deterministic,
+            return_episode_rewards=True
+        )
+        output_queue.put((float(np.mean(episode_rewards)), np.mean(episode_lengths), timestep))
+    env.close()
+            
 class SlidingEval(BaseCallback):
-    def __init__(self, max_steps, deterministic=True, n_eval_episodes=1):
+    def __init__(self, policy_class, policy_kwargs, max_steps, deterministic=True, n_eval_episodes=1):
         super(SlidingEval, self).__init__()
-        env = Monitor(SlidingAntEnv(change_steps=np.inf, max_steps=max_steps))
-        env.reset()
-        self.eval_env = DummyVecEnv([lambda: env])   # TODO: Need to do multiple envs / runs? Deterministic, but different start
+        #env = Monitor(SlidingAntEnv(change_steps=np.inf, max_steps=max_steps))
+        #env.reset()
+        #self.eval_env = DummyVecEnv([lambda: env])   # TODO: Need to do multiple envs / runs? Deterministic, but different start
+        #self.policy_class = policy_class
+        #self.policy_kwargs = policy_kwargs
+
         self.deterministic = deterministic
         self.n_eval_episodes = n_eval_episodes
+        self.max_steps = max_steps
+        
+        self.done = mp.Value('b', False)
+        self.input_queue = mp.Queue()
+        self.output_queue = mp.Queue()
+        
+    def _init_callback(self):
+        self.eval_process = mp.Process(target=eval_loop, kwargs={
+            'policy_cls': self.model.policy_class,
+            'settings': {'policy_kwargs': self.model.policy_kwargs},
+            'n_eval_episodes': self.n_eval_episodes,
+            'deterministic': self.deterministic,
+            'max_steps': self.max_steps,
+            'input_queue': self.input_queue,
+            'output_queue': self.output_queue,
+            'done_flag': self.done
+        })
+        self.eval_process.start()
         
     def _on_rollout_start(self):
         self._eval()
         
     def _on_training_end(self):
+        self.done.value = True
         self._eval()
     
     def _eval(self):
-        friction = self.training_env.get_attr('friction', 0)[0]
-        self.logger.record("friction", friction)
+        sd = self.model.policy.state_dict()
+        for name, tensor in sd.items():
+            sd[name] = tensor.cpu()
+            
+        self.input_queue.put((self.num_timesteps, sd, self.training_env.get_attr('friction', 0)[0]))
+
+        if self.done.value:
+            self.eval_process.join()
         
-        self.eval_env.env_method('set_friction', friction)
+        while not self.output_queue.empty():
+            mean_r, mean_l, timestep = self.output_queue.get_nowait()
+            self.logger.record("eval/mean_reward", mean_r)
+            self.logger.record("eval/mean_ep_length", mean_l)
+            self.logger.dump(timestep)
         
-        episode_rewards, episode_lengths = evaluate_policy(
-            self.model,
-            self.eval_env,
-            n_eval_episodes=self.n_eval_episodes,
-            deterministic=self.deterministic,
-            return_episode_rewards=True
-        )
-        self.logger.record("eval/mean_reward", float(np.mean(episode_rewards)))
-        self.logger.record("eval/mean_ep_length", np.mean(episode_lengths))
-        self.logger.dump(self.num_timesteps)
+        #friction = self.training_env.get_attr('friction', 0)[0]
+        #self.logger.record("friction", friction)
+        #
+        #self.eval_env.env_method('set_friction', friction)
+        #
+        #episode_rewards, episode_lengths = evaluate_policy(
+        #    self.model,
+        #    self.eval_env,
+        #    n_eval_episodes=self.n_eval_episodes,
+        #    deterministic=self.deterministic,
+        #    return_episode_rewards=True
+        #)
+        #self.logger.record("eval/mean_reward", float(np.mean(episode_rewards)))
+        #self.logger.record("eval/mean_ep_length", np.mean(episode_lengths))
+        #self.logger.dump(self.num_timesteps)
         
     def _on_step(self):
         return True

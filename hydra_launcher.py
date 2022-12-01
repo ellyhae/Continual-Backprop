@@ -62,7 +62,7 @@ def run_experiment(cfg: DictConfig) -> None:
     tb_log_name = cfg.name
     ppo.set_logger(configure_logger(0, tb_log_dir, tb_log_name, True, extra_formats=[WandbOutputFormat]))
     
-    callbacks = [WeightLogger(), AgesLogger(cfg.ages_dir), SlidingEval(**cfg.eval), WandbCallback(gradient_save_freq=cfg.wandb.gradient_save_freq)]
+    callbacks = [WeightLogger(), AgesLogger(cfg.ages_dir), SlidingEval(policy_class=learner_class, policy_kwargs=settings['policy_kwargs'], **cfg.eval), WandbCallback(gradient_save_freq=cfg.wandb.gradient_save_freq)]
     ppo.learn(total_timesteps=cfg.total_timesteps, callback=callbacks, tb_log_name=tb_log_name)
     
     ppo.save(os.path.join(cfg.model_dir, cfg.name))
