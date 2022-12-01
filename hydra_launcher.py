@@ -44,10 +44,9 @@ def run_experiment(cfg: DictConfig) -> None:
         reinit=True
     )
     
-    env = make_vec_env(SlidingAntEnv, cfg.n_envs, seed=cfg.random.seed, vec_env_cls=SubprocVecEnv, env_kwargs={'change_steps':(cfg.total_timesteps//cfg.n_jumps)//cfg.n_envs, 'max_steps':cfg.train_max_steps, 'seed':cfg.random.seed})
+    vec_env_cls = DummyVecEnv if cfg.n_envs == 1 else SubprocVecEnv
     
-    #env = Monitor(SlidingAntEnv(cfg.total_timesteps//cfg.n_jumps, max_steps=cfg.train_max_steps, seed=cfg.random.seed))
-    #env = DummyVecEnv([lambda: env])
+    env = make_vec_env(SlidingAntEnv, cfg.n_envs, seed=cfg.random.seed, vec_env_cls=vec_env_cls, env_kwargs={'change_steps':(cfg.total_timesteps//cfg.n_jumps)//cfg.n_envs, 'max_steps':cfg.train_max_steps, 'seed':cfg.random.seed})
     
     #env = VecVideoRecorder(env, cfg.video_dir, record_video_trigger=lambda x: x % (cfg.total_timesteps // (cfg.n_jumps * 2)) == 0, video_length=500)
     
