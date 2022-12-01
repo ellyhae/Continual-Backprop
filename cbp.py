@@ -4,6 +4,8 @@ import math
 from stable_baselines3.common.utils import get_device
 from typing import Dict, Tuple
 
+# TODO: maybe remove in-place operation in jit. This can speed up execution, as in-place operations are not translated/optimized properly
+
 @torch.jit.script
 def _hook_calcs(cbp_vals: Dict[str, torch.Tensor], out: torch.Tensor, eta: torch.Tensor):
     # NOTE Seems CBP is only described for sequential input with gradient updates at each step.
