@@ -72,7 +72,7 @@ class AgesLogger(BaseCallback):
             self.iteration += 1
 
 def eval_loop(policy_cls, settings, n_eval_episodes, deterministic, max_steps, input_queue, output_queue, done_flag):
-    env  = make_vec_env(SlidingAntEnv, 1, env_kwargs={'change_steps':np.inf, 'max_steps':max_steps}, vec_env_kwargs={'start_method': 'spawn'})
+    env  = make_vec_env(SlidingAntEnv, 1, env_kwargs={'change_steps':np.inf, 'max_steps':max_steps})
     env.reset()
     model = PPO(policy_cls, env, **settings)
     while not done_flag.value:
