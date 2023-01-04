@@ -72,7 +72,7 @@ class AgesLogger(BaseCallback):
             self.iteration += 1
 
 def eval_loop(policy_cls, settings, n_eval_episodes, deterministic, max_steps, input_queue, output_queue, done_flag):
-    env  = make_vec_env(SlidingAntEnv, 1, env_kwargs={'change_steps':np.inf, 'max_steps':max_steps})
+    env  = make_vec_env(SlidingAntEnv, 1, env_kwargs={'change_steps':np.inf, 'max_steps':max_steps}, vec_env_kwargs={'start_method': 'spawn'})
     env.reset()
     model = PPO(policy_cls, env, **settings)
     while not done_flag.value:
@@ -103,13 +103,15 @@ class SlidingEval(BaseCallback):
         self.deterministic = deterministic
         self.n_eval_episodes = n_eval_episodes
         self.max_steps = max_steps
+
+        self.ctx = mp.get_context('spawn')
         
-        self.done = mp.Value('b', False)
-        self.input_queue = mp.Queue()
-        self.output_queue = mp.Queue()
+        self.done = self.ctx.Value('b', False)
+        self.input_queue = self.ctx.Queue()
+        self.output_queue = self.ctx.Queue()
         
     def _init_callback(self):
-        self.eval_process = mp.Process(target=eval_loop, kwargs={
+        self.eval_process = self.ctx.Process(target=eval_loop, kwargs={
             'policy_cls': self.model.policy_class,
             'settings': {'policy_kwargs': self.model.policy_kwargs},
             'n_eval_episodes': self.n_eval_episodes,
