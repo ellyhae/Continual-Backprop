@@ -24,8 +24,6 @@ from env import SlidingAntEnv
 from utils import WeightLogger, AgesLogger, SlidingEval
 from sb3_logger import configure_logger, WandbOutputFormat
 
-wandb.setup()
-
 @hydra.main(version_base=None, config_path="hydra_config", config_name="config")
 def run_experiment(cfg: DictConfig) -> None:
     
@@ -72,4 +70,5 @@ def run_experiment(cfg: DictConfig) -> None:
     ppo.logger.close()
 
 if __name__ == "__main__":
+    wandb.setup()
     run_experiment()

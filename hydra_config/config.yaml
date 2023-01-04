@@ -2,7 +2,7 @@ defaults:
   - _self_
   - random: seed1
   - algorithm: ppo
-  - override hydra/launcher: joblib
+#  - override hydra/launcher: joblib
 
 hydra:
   sweep:
@@ -10,8 +10,8 @@ hydra:
     subdir: ${hydra.runtime.choices.algorithm}/${hydra.runtime.choices.random}
   job:
     chdir: True
-  launcher:
-    n_jobs: 4
+#  launcher:
+#    n_jobs: 4
 
 name: ${hydra:runtime.choices.algorithm}_${hydra:runtime.choices.random}
 
