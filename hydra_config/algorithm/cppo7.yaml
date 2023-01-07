@@ -1,0 +1,9 @@
+# Custom values trying to get better performance
+
+policy: CPPO_Policy
+
+settings:
+  policy_kwargs:
+    optimizer_kwargs:
+      rho: 1e-8
+      m: 500000
