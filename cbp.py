@@ -29,7 +29,7 @@ def _step_calcs(cbp_vals: Dict[str, torch.Tensor],
                 pre_linear: torch.nn.Parameter,
                 post_linear: torch.nn.Parameter,
                 eta: float, m: int, rho: float, eps: float,
-                #sample_weights: torch.jit.ScriptFunction # callables not supported jet
+                #sample_weights: torch.jit.ScriptFunction # callables not supported yet
                ):
     pre_w = pre_linear.abs().sum(1).detach_().add_(eps) # avoid division by zero
     post_w = post_linear.abs().sum(0).detach_()
@@ -135,7 +135,6 @@ class CBP(CAdam):
         return hook
     
     def _add_hooks(self, linears, activations):
-        assert len(linears) == len(activations
-                                  )
+        assert len(linears) == len(activations)
         for lin, act in zip(linears, activations):
             act.register_forward_hook(self._hook_gen(lin))
