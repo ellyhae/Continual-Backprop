@@ -83,7 +83,7 @@ class CBP(CAdam):
                  eps=1e-8,               # small additive value to avoid division by zero
                  device = 'auto',
                  **kwargs):
-        super(CBP, self).__init__(params, **kwargs)
+        super(CBP, self).__init__(params, eps=eps, **kwargs)
         self.linear_layers = linear_layers
         self.activation_layers = activation_layers
         self.cbp_vals = {}
