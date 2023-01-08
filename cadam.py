@@ -141,20 +141,6 @@ def cadam(params: List[Tensor],
          capturable=capturable)
 
 @torch.jit.script
-def _cadam_calcs(param, grad, exp_avg, exp_avg_sq, step, beta1: float, beta2: float, lr: float, eps: float, weight_decay: float):
-    step.add_(1)
-    if weight_decay != 0:
-        grad = grad.add(param, alpha=weight_decay)
-        
-    exp_avg = exp_avg.mul(beta1).add(grad, alpha=1 - beta1)
-    exp_avg_sq = exp_avg_sq.mul(beta2).addcmul(grad, grad.conj(), value=1 - beta2)
-    bias_correction1 = 1 - beta1 ** step
-    bias_correction2 = 1 - beta2 ** step
-    step_size = lr / bias_correction1
-    bias_correction2_sqrt = bias_correction2.sqrt()
-    denom = (exp_avg_sq.sqrt() / bias_correction2_sqrt).add(eps)
-    return (exp_avg / denom).mul(step_size)
-
 def _single_tensor_cadam(params: List[Tensor],
                         grads: List[Tensor],
                         exp_avgs: List[Tensor],
@@ -176,9 +162,23 @@ def _single_tensor_cadam(params: List[Tensor],
         grad = grads[i] if not maximize else -grads[i]
         exp_avg = exp_avgs[i]
         exp_avg_sq = exp_avg_sqs[i]
-        step_t = state_steps[i]
+        step = state_steps[i]
 
         if capturable:
-            assert param.is_cuda and step_t.is_cuda, "If capturable=True, params and state_steps must be CUDA tensors."
-
-        param.sub_(_cadam_calcs(param, grad, exp_avg, exp_avg_sq, step_t, beta1, beta2, lr, eps, weight_decay))
+            assert param.is_cuda and step.is_cuda, "If capturable=True, params and state_steps must be CUDA tensors."
+            
+        step.add_(1)
+        if weight_decay != 0:
+            grad = grad.add(param, alpha=weight_decay)
+            
+        exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+        exp_avg_sq.mul_(beta2).addcmul_(grad, grad.conj(), value=1 - beta2)
+        
+        bias_correction1 = 1 - torch.pow(beta1, step)
+        bias_correction2 = 1 - torch.pow(beta2, step)
+        bias_correction2_sqrt = bias_correction2.sqrt()
+        
+        step_size = lr / bias_correction1
+        
+        denom = (exp_avg_sq.sqrt() / bias_correction2_sqrt).add(eps)
+        param.sub_((exp_avg / denom).mul(step_size))
