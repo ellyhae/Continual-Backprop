@@ -20,7 +20,7 @@ seed_name: ${hydra:runtime.choices.random}
 total_timesteps: 100000000
 n_jumps: 10
 n_envs: 4
-train_max_steps: 2000
+train_max_steps: 500
 model_dir: ./
 ages_dir: ./ages
 video_dir: ./video
@@ -46,7 +46,7 @@ algorithm:
         eps: 1e-5
 
 eval:
-  max_steps: 2000
+  max_steps: 500
   n_eval_episodes: 1
   deterministic: True
 
