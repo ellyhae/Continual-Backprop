@@ -48,7 +48,9 @@ class AgesLogger(BaseCallback):
         os.makedirs(self.save_dir, exist_ok=True)
     
     def _on_rollout_start(self):
-        self._save()
+        if self.iteration % 50 == 0:
+            self._save()
+        self.iteration += 1
         
     def _on_training_end(self):
         self._save()
@@ -68,8 +70,6 @@ class AgesLogger(BaseCallback):
             self.logger.dump(self.num_timesteps)
             
             np.savez_compressed(os.path.join(self.save_dir, str(self.iteration)+'.npz'), **ages)
-                
-            self.iteration += 1
 
 def eval_loop(policy_cls, settings, n_eval_episodes, deterministic, max_steps, input_queue, output_queue, done_flag):
     env  = make_vec_env(SlidingAntEnv, 1, env_kwargs={'change_steps':np.inf, 'max_steps':max_steps})
