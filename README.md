@@ -1,27 +1,19 @@
 # Continual-Backprop
 Implementations and experiments for Continual Backprop (CBP) and Continual PPO (CPPO).
 
-Currently:
-- Adam implementation that allows for resetting individual weights' 'step' counter
-- Jupyter notebook for trial and error experiments
-- Pre-calculated 1M steps of bitflip environment data for easier validation of changed algorithms
+Includes:
 - SlipperyAnt environment based on Pybullets' Ant environment. Periodically changes the friction between ant and ground
-- CBP implementation. There are still open questions about handling batches and replacement rate
+- Adam implementation that allows for resetting individual weights' 'step' counter
+- CPB+Adam implementation
 - CPPO based on PPO implementation by stable baselines 3
-- Training notebook for everything related to training CPPO
-- Tensorboard logging.
+- Weights & Biases logger for Stable baselines 3. Logs available at [here](https://wandb.ai/hae_/CPPO)
+- Several logging callbacks
+- Hydra configuration management
+- Multiple old Jupyter notebooks. Used for development and testing, preserved for future reference
 
-## WandB
+## Start experiments
 
-On Windows: remember to activate Developer Mode, otherwise WandB cannot sync Tensorboard data (relies on symlinks that are not available otherwise)
-
-## Tensorboard
-
-```console
-tensorboard --logdir [path, e.g. hydra_outputs/date/time]
-```
-
-## Hydra
+Activate the conda environment and then use a command similar to
 
 ```console
 python hydra_launcher.py --multirun algorithm=ppo,cppo1 random=seed1,seed2
